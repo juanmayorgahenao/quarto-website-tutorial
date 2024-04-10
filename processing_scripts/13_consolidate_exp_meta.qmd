@@ -1,0 +1,182 @@
+---
+title: "Palau 2024"
+number-sections: false
+date: today
+theme: cosmo
+format: 
+  html:
+    self-contained: true
+    code-fold: true
+    toc: true
+    toc-location: right
+---
+
+```{r, message = F, warning = F, fig.width = 10, fig.height = 10, echo = F}
+library(paletteer)
+library(sf)
+library(bigrquery)
+library(gt)
+library(tidyverse)
+
+knitr::opts_chunk$set(eval = F, warning = F, message = F, include = F, echo = F)
+
+PristineSeasR::set_ps_paths(email = "marine.data.science@ngs.org")
+
+exp_id <- "PLW_2024"
+
+exp_path <- file.path(ps_science_path, "expeditions", "PLW-2024")
+
+ps_data_path <- file.path(ps_science_path, "datasets/")
+
+bigrquery::bq_auth(email = "marine.data.science@ngs.org")
+
+bq_connection <- DBI::dbConnect(bigrquery::bigquery(), project = "pristine-seas")
+```
+
+# Summary of work
+
+```{r exp_meta, eval = F}
+shrd_cols <- c("expedition", "method", "ps_site_id", "station_id", "location", "date", "local_time", "lat", "lon", "depth_m", "team_lead")
+
+joint_uvs_meta <- tbl(bq_connection, "metadata.PLW_2024_fish") |> 
+  rename("team_lead" = "diver",
+         "station_id" = "transect_id") |> 
+  select(all_of(shrd_cols)) |> 
+  collect() |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_lpi") |> 
+              rename("team_lead" = "diver",
+                     "station_id" = "transect_id") |> 
+              select(all_of(shrd_cols)) |> 
+              collect()) |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_inverts")  |> 
+              rename("team_lead" = "diver",
+                     "station_id" = "transect_id") |> 
+              select(all_of(shrd_cols))|> 
+              collect()) |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_recruits") |> 
+              rename("team_lead" = "diver",
+                     "station_id" = "transect_id") |> 
+              select(all_of(shrd_cols))|> 
+              collect()) |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_clams") |> 
+              rename("team_lead" = "diver",
+                     "station_id" = "transect_id") |> 
+              select(all_of(shrd_cols))|> 
+              collect())
+
+expedition_meta <- joint_uvs_meta |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_edna")  |> 
+              rename("local_time" = "collection_time") |>
+              select(all_of(shrd_cols)) |> 
+              collect())
+
+expedition_meta <- expedition_meta |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_bbruvs") |> 
+              mutate(station_id = ps_site_id) |>
+              select(all_of(shrd_cols)) |> 
+              collect())
+
+expedition_meta <- expedition_meta |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_pbruvs") |> 
+              mutate(lon = coalesce(lon_in, lon_out),
+                     lat = coalesce(lat_in, lat_out),
+                     local_time = coalesce(time_in, time_out)) |> 
+              select(any_of(shrd_cols), uwa_opcode) |> 
+              collect() |> 
+              group_by(across(c(-lon, -lat, -local_time, -uwa_opcode) )) |> 
+              summarize(across(c(lon, lat, local_time), first)) |> 
+              mutate(station_id = ps_site_id) |> 
+              select(all_of(shrd_cols)) )
+
+expedition_meta <- expedition_meta |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_dscm") |> 
+              mutate(station_id = ps_site_id) |> 
+              rename("local_time" = "time_in", 
+                     "lon" = "lon_in",
+                     "lat" = "lat_in",
+                     "date" = "date_in") |> 
+              select(all_of(shrd_cols))|> 
+              collect()) 
+
+expedition_meta <- expedition_meta |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_birds")  |> 
+              mutate(station_id = ps_site_id) |> 
+              mutate(lon = coalesce(lon_start, lon_stop),
+                     lat = coalesce(lat_start, lat_stop)) |> 
+              rename("local_time" = "time_start") |> 
+              select(any_of(shrd_cols))|> 
+              collect()) 
+
+expedition_meta <- expedition_meta |> 
+  bind_rows(tbl(bq_connection, "metadata.PLW_2024_rov")  |> 
+              mutate(station_id = transect_id) |> 
+              rename("local_time" = "time_in", 
+                     "lon" = "lon_in",
+                     "lat" = "lat_in",
+                     "depth_m" = "max_depth_m") |> 
+              select(all_of(shrd_cols))|> 
+              collect())
+
+bq_table_create(paste0("pristine-seas.metadata.", exp_id), 
+                fields = as_bq_fields(expedition_meta))
+
+bigrquery::bq_table_upload(paste0("pristine-seas.metadata.", exp_id),
+                           values = expedition_meta, fields = expedition_meta)
+```
+
+```{r exp_meta_tbl, eval = T, include = T}
+#| tbl-cap-location: margin
+#| column: page-right
+
+expedition_meta <- tbl(bq_connection, "metadata.PLW_2024") |> 
+  filter(location != "Transit") |> 
+  collect()
+
+expedition_meta |> 
+  group_by(location, method) |> 
+  summarize(n_sites = n_distinct(station_id)) |> 
+  pivot_wider(names_from = location, 
+              values_from = n_sites, 
+              values_fill = 0) |> 
+  gt::gt(rowname_col = "method") |> 
+  grand_summary_rows(columns = everything(),
+                     fns = list(list(label = md("**Grand total**"), fn = "sum")),
+                     fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  tab_spanner(label = "SW Islands",
+              columns = c("Sonsorol", "Fanna", "Pulo Anna", "Merir", "Tobi", "Helen")) |> 
+  tab_spanner(label = "Offshore",
+              columns = c("Babeldaob", "SW Slope", "NW Slope", "Seamount A", "Seamount B-N", "Seamount B-C", "Seamount B-S")) |> 
+  tab_header(title = "Number of workstations per method and location") |> 
+  opt_align_table_header(align = "left") |> 
+  tab_style(locations = cells_grand_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +2))) |> 
+  tab_options(ihtml.use_compact_mode = TRUE,
+              data_row.padding = px(5)) 
+```
+
+```{r exp_meta_map, eval = T, include = T}
+#| label: fig-exp-meta
+#| fig-cap: "Work sites"
+#| cap-location: margin
+tmp <- expedition_meta |> 
+  filter(!is.na(lon)) |> 
+  collect() |> 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) |> 
+  group_by(method, ps_site_id, location, geometry) |> 
+  summarize(strata = paste0(depth_m, "m",collapse = ", ")) |> 
+  st_jitter(factor = 0.000007)
+
+mapview::mapview(tmp ,
+                 zcol = c(method = "method"), 
+                 legend = TRUE,
+                 alpha = 0.5,
+                 col.regions = paletteer_d("ggsci::flattastic_flatui", 11),
+                 map.types = c("Esri.WorldImagery"),
+                 layer.name = "method",
+                 popup = leafpop::popupTable(tmp,
+                                             zcol = c("method",
+                                                      "ps_site_id",
+                                                      "location",
+                                                      "strata")))
+```
+

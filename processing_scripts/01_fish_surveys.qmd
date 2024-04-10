@@ -1,0 +1,163 @@
+---
+title: "Palau 2024"
+number-sections: false
+date: today
+theme: cosmo
+format: 
+  html:
+    self-contained: true
+    code-fold: true
+    toc: true
+    toc-location: right
+---
+
+```{r, message = F, warning = F, fig.width = 10, fig.height = 10, echo = F}
+library(paletteer)
+library(sf)
+library(bigrquery)
+library(gt)
+library(tidyverse)
+
+knitr::opts_chunk$set(eval = F, warning = F, message = F, include = F, echo = F)
+
+PristineSeasR::set_ps_paths(email = "marine.data.science@ngs.org")
+
+exp_id <- "PLW_2024"
+
+exp_path <- file.path(ps_science_path, "expeditions", "PLW-2024")
+
+ps_data_path <- file.path(ps_science_path, "datasets/")
+
+bigrquery::bq_auth(email = "marine.data.science@ngs.org")
+
+bq_connection <- DBI::dbConnect(bigrquery::bigquery(), project = "pristine-seas")
+```
+
+# Fish surveys
+
+## Metadata
+
+```{r uvs, eval = TRUE}
+uvs_meta <- readxl::read_xlsx(file.path(exp_path, 
+                                        paste0("data/primary/raw/fish/",
+                                               exp_id,
+                                               "_fish_fieldbook_AMF.xlsx"))) |> 
+  as_tibble()
+
+uvs_meta <- uvs_meta |> 
+  mutate(expedition = exp_id, 
+         uvs_id = ps_station_id,
+         date = lubridate::dmy(dd_mm_yyyy),
+         local_time = hms::as_hms(local_time)) |> 
+  select(expedition,  uvs_id, location, date, local_time, lat, lon, habitat, exposure, alternative_site_id, everything(), -dd_mm_yyyy, -sand_number, -sand_m, -ps_station_id, -team_lead)
+```
+
+```{r fish_clean, eval = TRUE}
+fish_reel_length <- 25
+
+amf_fish_obs <- readxl::read_xlsx(file.path(exp_path, 
+                                            paste0("data/primary/raw/fish/",
+                                                   exp_id,
+                                                   "_fish_fieldbook_AMF.xlsx")),
+                                  sheet = "obs") |> 
+  as_tibble()
+  
+aaf_fish_obs <- readxl::read_xlsx(file.path(exp_path, 
+                                        paste0("data/primary/raw/fish/",
+                                               exp_id,
+                                               "_fish_fieldbook_Alex_FINAL.xlsx")),
+                                  sheet = "obs") |> 
+  as_tibble()
+  
+fish_obs <- bind_rows(amf_fish_obs, aaf_fish_obs) 
+
+fish_meta <- fish_obs |> 
+  rename(uvs_id = ps_station_id,
+         reel = transect) |> 
+  group_by(uvs_id, diver, depth_m) |>
+  summarize(n_reels = n_distinct(reel),
+            transect_length_m = n_reels*fish_reel_length) 
+
+fish_meta <- fish_meta |> 
+  mutate(method = "Fish survey",
+         ps_site_id = str_replace(uvs_id,  "uvs", "fish"),
+         transect_id = paste(ps_site_id, diver, paste0(depth_m, "m"), sep = "_"),
+         diver = case_when(diver == "AMF" ~ "Alan Friedlander", 
+                           diver == "AAF"  ~ "Alex Filous",
+                           TRUE ~ diver),
+         depth_strata = case_when(depth_m <= 5 ~ "Supershallow",
+                                  depth_m <= 15 ~ "Shallow",
+                                  depth_m > 15 ~ "Deep")) |> 
+  left_join(uvs_meta) |> 
+  select(expedition, method, ps_site_id, location, date, local_time, lat, lon, habitat, exposure, transect_id, depth_strata, depth_m, transect_length_m, n_reels, uvs_id , alternative_site_id, diver) |> 
+  ungroup() |> 
+  arrange(ps_site_id)
+```
+
+```{r fish_map, eval = TRUE, include = T}
+library(mapview)
+
+tmp <- fish_meta |> 
+  filter(!is.na(lat)) |> 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) |> 
+  group_by(method, ps_site_id, location, habitat, exposure) |> 
+  summarize(strata = paste0(depth_m, "m",collapse = ", "))
+
+mapview::mapview(tmp,
+                 zcol = c(habitat = "habitat"), 
+                 legend = TRUE,
+                 col.regions = paletteer_d("wesanderson::Darjeeling1", 3),
+                 map.types = c("Esri.WorldImagery"),
+                 layer.name = "Habitat",
+                 popup = leafpop::popupTable(tmp,
+                                      zcol = c("method",
+                                               "ps_site_id",
+                                               "location",
+                                               "habitat",
+                                               "exposure", 
+                                               "strata")))
+```
+
+```{r fish_table, eval = TRUE, include = T}
+fish_meta |> 
+  group_by(location, exposure, habitat) |> 
+  summarize(strata = n_distinct(depth_strata),
+            n_sites = n_distinct(ps_site_id),
+            n_transects = n_distinct(ps_site_id, depth_strata, diver),
+            n_reels = sum(n_reels),
+            surveyed_distance_m = sum(transect_length_m)) |> 
+  ungroup() |> 
+  group_by(location) |> 
+  gt::gt(rowname_col = "habitat", groupname_col = "location") |> 
+  summary_rows(columns  = contains(c("n_", "_m")),
+               fns = list(list(label = md("*Total*"), fn = "sum")),
+               fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  grand_summary_rows(columns  = contains(c("n_", "_m")),
+                     fns = list(list(label = md("**Grand total**"), fn = "sum")),
+                     fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  tab_header(title = "Number of fish surveys per location, habitat, and exposure") |>
+  opt_align_table_header(align = "left") |> 
+  tab_style(locations = cells_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +1))) |> 
+  tab_style(locations = cells_grand_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +2))) |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_row_groups()) |> 
+  tab_options(ihtml.use_compact_mode = TRUE,
+              data_row.padding = px(5)) |> 
+  cols_label_with(fn = ~str_replace(.x, "n_", "# ") |> 
+                    str_to_title()) |> 
+  cols_label(ends_with("_m") ~ "Surveyed distance (m)")
+```
+```{r fish_NA, eval, include = F}
+naniar::vis_miss(fish_meta)
+```
+
+```{r fish_export, eval = F}
+bq_table_create(paste0("pristine-seas.metadata.", exp_id, "_fish"), 
+                fields = as_bq_fields(fish_meta))
+
+bigrquery::bq_table_upload(paste0("pristine-seas.metadata.", exp_id, "_fish"), 
+                           values = fish_meta, fields = fish_meta)
+```
+

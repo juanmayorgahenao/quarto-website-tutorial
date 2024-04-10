@@ -1,0 +1,152 @@
+---
+title: "Palau 2024"
+number-sections: false
+date: today
+theme: cosmo
+format: 
+  html:
+    self-contained: true
+    code-fold: true
+    toc: true
+    toc-location: right
+---
+
+```{r, message = F, warning = F, fig.width = 10, fig.height = 10, echo = F}
+library(paletteer)
+library(sf)
+library(bigrquery)
+library(gt)
+library(tidyverse)
+
+knitr::opts_chunk$set(eval = F, warning = F, message = F, include = F, echo = F)
+
+PristineSeasR::set_ps_paths(email = "marine.data.science@ngs.org")
+
+exp_id <- "PLW_2024"
+
+exp_path <- file.path(ps_science_path, "expeditions", "PLW-2024")
+
+ps_data_path <- file.path(ps_science_path, "datasets/")
+
+bigrquery::bq_auth(email = "marine.data.science@ngs.org")
+
+bq_connection <- DBI::dbConnect(bigrquery::bigquery(), project = "pristine-seas")
+```
+
+# Giant clams
+
+## Metadata
+
+```{r uvs, eval = TRUE}
+lpi_meta <- tbl(bq_connection, "metadata.PLW_2024_lpi") |> 
+  filter(method == "Benthic survey") |> 
+  collect()
+
+uvs_meta <- readxl::read_xlsx(file.path(exp_path, 
+                                        paste0("data/primary/raw/fish/",
+                                               exp_id,
+                                               "_fish_fieldbook_AMF.xlsx"))) |> 
+  as_tibble()
+
+uvs_meta <- uvs_meta |> 
+  mutate(expedition = exp_id, 
+         uvs_id = ps_station_id,
+         date = lubridate::dmy(dd_mm_yyyy),
+         local_time = hms::as_hms(local_time)) |> 
+  select(expedition,  uvs_id, location, date, local_time, lat, lon, habitat, exposure, alternative_site_id, everything(), -dd_mm_yyyy, -sand_number, -sand_m, -ps_station_id, -team_lead)
+```
+
+```{r clams_clean, eval = TRUE}
+clams_fieldbook <-  readxl::read_xlsx(file.path(exp_path, 
+                                                   paste0("data/primary/raw/benthos/",
+                                                          exp_id,
+                                                          "_Inverts.xlsx")),
+                                        sheet = "Giant Clam Sizes") |> 
+  as_tibble() |> 
+  janitor::clean_names() |> 
+  mutate(site = str_replace_all(site, "-", "_")) |> 
+  separate(site, into = c("exp", "uvs_numer"), convert = T) |> 
+  mutate(uvs_id = paste(exp_id, "uvs", formatC(uvs_numer, width = 2, flag = 0), 
+                        sep = "_")) |> 
+  group_by(uvs_id) |> 
+  mutate(ps_site_id = paste(exp_id,"clams",
+                            formatC(cur_group_id(), 
+                                    flag = 0, width = 2),
+                            sep = "_")) |> 
+  ungroup() |> 
+  select(ps_site_id, uvs_id, transect = strata, depth, species, size,)
+
+clams_meta <- clams_fieldbook |> 
+  distinct(ps_site_id, uvs_id, transect) |> 
+  left_join(lpi_meta |> 
+              select(-ps_site_id,  -transect_length_m, -n_sections, -pts)) |> 
+  mutate(method = "Giant clam demographics",
+         diver = "Molly Timmers",
+         transect_id = paste(ps_site_id, transect, paste0(depth_m, "m"), sep = "_")) |> 
+    select(expedition, method, ps_site_id, location, date, local_time, lat, lon, habitat,exposure,transect_id,
+           transect,depth_strata, depth_m,  uvs_id , alternative_site_id, diver) |>
+  ungroup() |> 
+  arrange(ps_site_id)
+```
+
+```{r clams_map, eval = TRUE, include = T}
+tmp <- clams_meta |> 
+  filter(!is.na(lat)) |> 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) |> 
+  group_by(method, ps_site_id, location, habitat, exposure, geometry) |> 
+  summarize(strata = paste0(depth_m, "m", collapse = ", "))
+
+mapview::mapview(tmp,
+                 zcol = c(habitat = "habitat"), 
+                 legend = TRUE,
+                 col.regions = paletteer_d("wesanderson::Darjeeling1", 3),
+                 map.types = c("Esri.WorldImagery"),
+                 layer.name = "Habitat",
+                 popup = leafpop::popupTable(tmp,
+                                      zcol = c("method",
+                                               "ps_site_id",
+                                               "location",
+                                               "habitat",
+                                               "exposure",
+                                               "strata")))
+```
+
+```{r clams_table, eval = TRUE, include = T}
+clams_meta |> 
+  group_by(location, exposure, habitat) |> 
+  summarize(strata = n_distinct(depth_strata),
+            n_sites = n_distinct(ps_site_id),
+            n_transects = n_distinct(ps_site_id, transect)) |> 
+  ungroup() |> 
+  group_by(location) |> 
+  gt::gt(rowname_col = "habitat", groupname_col = "location") |> 
+  summary_rows(columns  = contains(c("n_", "_m")),
+               fns = list(list(label = md("*Total*"), fn = "sum")),
+               fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  grand_summary_rows(columns  = contains(c("n_", "_m")),
+                     fns = list(list(label = md("**Grand total**"), fn = "sum")),
+                     fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  tab_header(title = "Giant Clam surveys per location, habitat, and exposure") |>
+  opt_align_table_header(align = "left") |> 
+  tab_style(locations = cells_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +1))) |> 
+  tab_style(locations = cells_grand_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +2))) |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_row_groups()) |> 
+  tab_options(ihtml.use_compact_mode = TRUE,
+              data_row.padding = px(5)) |> 
+  cols_label_with(fn = ~str_replace(.x, "n_", "# ") |> 
+                    str_to_title()) |> 
+  cols_label(ends_with("_m") ~ "Surveyed distance (m)")
+```
+
+```{r clams_export, eval = F}
+bq_table_create(paste0("pristine-seas.metadata.",exp_id, "_clams"), 
+                fields = as_bq_fields(clams_meta))
+
+bigrquery::bq_table_upload(paste0("pristine-seas.metadata.",exp_id, "_clams"), 
+                           values = clams_meta, fields = clams_meta)
+```
+
+

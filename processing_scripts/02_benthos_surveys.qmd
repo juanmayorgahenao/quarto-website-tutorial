@@ -1,0 +1,207 @@
+---
+title: "Palau 2024"
+number-sections: false
+date: today
+theme: cosmo
+format: 
+  html:
+    self-contained: true
+    code-fold: true
+    toc: true
+    toc-location: right
+---
+
+```{r, message = F, warning = F, fig.width = 10, fig.height = 10, echo = F}
+library(paletteer)
+library(sf)
+library(bigrquery)
+library(gt)
+library(tidyverse)
+
+knitr::opts_chunk$set(eval = F, warning = F, message = F, include = F, echo = F)
+
+PristineSeasR::set_ps_paths(email = "marine.data.science@ngs.org")
+
+exp_id <- "PLW_2024"
+
+exp_path <- file.path(ps_science_path, "expeditions", "PLW-2024")
+
+ps_data_path <- file.path(ps_science_path, "datasets/")
+
+bigrquery::bq_auth(email = "marine.data.science@ngs.org")
+
+bq_connection <- DBI::dbConnect(bigrquery::bigquery(), project = "pristine-seas")
+```
+
+# Benthos surveys
+
+## Metadata
+
+```{r uvs, eval = TRUE}
+uvs_meta <- readxl::read_xlsx(file.path(exp_path, 
+                                        paste0("data/primary/raw/fish/",
+                                               exp_id,
+                                               "_fish_fieldbook_AMF.xlsx"))) |> 
+  as_tibble()
+
+uvs_meta <- uvs_meta |> 
+  mutate(expedition = exp_id, 
+         uvs_id = ps_station_id,
+         date = lubridate::dmy(dd_mm_yyyy),
+         local_time = hms::as_hms(local_time)) |> 
+  select(expedition,  uvs_id, location, date, local_time, lat, lon, habitat, exposure, alternative_site_id, everything(), -dd_mm_yyyy, -sand_number, -sand_m, -ps_station_id, -team_lead)
+```
+
+```{r lpi_clean, eval = TRUE, include = F}
+lpi_transects <- readxl::read_excel(file.path(exp_path, 
+                                             paste0("data/primary/raw/benthos/",
+                                                    exp_id,
+                                                    "_lpi_fieldsheet_Quim_final.xlsx")),
+                                   n_max = 6, 
+                                   col_names = FALSE, 
+                                   sheet = "LPI") |> 
+  as_tibble() |> 
+  janitor::clean_names() |> 
+  column_to_rownames(var = "x1") %>% 
+  t() |> 
+  as_tibble() %>% 
+  remove_rownames() 
+ 
+lpi_transects <- lpi_transects |> 
+  mutate(date = as.Date(as.numeric(date), origin = "1899-12-30"),
+         transect = str_extract(transect, "[A-Z]+"),
+         site_number = as.numeric(site_number),
+         uvs_id = paste0(exp_id, "_uvs_",
+                         formatC(as.numeric(str_extract(site_number, "[0-9]+")), 
+                                 width = 2, flag = 0)),
+         depth_m = as.numeric(depth_m)) |> 
+  select(date, uvs_id, transect, depth_m, transect_section) |> 
+  group_by(uvs_id) |> 
+  mutate(ps_site_id = paste(exp_id,"lpi",
+                            formatC(cur_group_id(), 
+                                    flag = 0, width = 2),
+                            sep = "_")) |> 
+  ungroup() |> 
+  separate(transect_section, into = c("min", "max"), convert = T) |> 
+  mutate(section_length_m = max - min) |> 
+  unite(col = "transect_section", c(min, max), sep = "-") 
+
+lpi_obs <- readxl::read_excel(file.path(exp_path, 
+                                             paste0("data/primary/raw/benthos/",
+                                                    exp_id,
+                                                    "_lpi_fieldsheet_Quim_final.xlsx")),
+                                   skip = 7, 
+                                   col_names = FALSE, 
+                                   sheet = "LPI",
+                              range = "B8:PV129") |> 
+  as_tibble() |> 
+  janitor::clean_names() |> 
+  select(-x2) |> 
+  filter(!is.na(x1)) |> 
+  column_to_rownames(var = "x1") |> 
+  t() %>% 
+  as_tibble()
+
+lpi_transects <- lpi_transects |> 
+  cbind(lpi_obs) |> 
+  pivot_longer(-c(date, ps_site_id, uvs_id, transect, depth_m, transect_section, section_length_m), 
+               names_to = "taxon", 
+               values_to = "pts") |>
+  mutate(pts = as.numeric(pts)) |>
+  replace_na(list(pts = 0)) |> 
+  ungroup() |> 
+  group_by(date, ps_site_id, uvs_id, transect, depth_m, transect_section, section_length_m) %>% 
+  summarise(pts = sum(pts)) %>% 
+  ungroup()
+
+lpi_meta <- lpi_transects |> 
+  filter(pts > 0) |> 
+  group_by(date, ps_site_id, uvs_id, transect, depth_m) |> 
+  summarise(transect_length_m = sum(section_length_m),
+            n_sections = n(),
+            pts = sum(pts)) |>
+  ungroup()
+
+lpi_meta <- lpi_meta |> 
+  mutate(method = "Benthic survey",
+         team_lead = "Joaquim Garrabou/Eveline van der Steeg",
+         transect_id = paste(ps_site_id, transect, paste0(depth_m, "m"), sep = "_"),
+         depth_strata = case_when(depth_m <= 5 ~ "Supershallow",
+                                  depth_m <= 15 ~ "Shallow",
+                                  depth_m > 15 ~ "Deep")) |> 
+  left_join(uvs_meta |> 
+              select( -date)) |> 
+  select(expedition, method, ps_site_id, location, date, local_time, lat, lon, habitat, exposure, transect_id, 
+         transect, depth_strata, depth_m, transect_length_m, n_sections, pts, uvs_id , alternative_site_id, diver = team_lead) |>
+  ungroup() |> 
+  arrange(ps_site_id)
+```
+
+```{r eval = F, include = F}
+fish_meta |> 
+  anti_join(lpi_meta |> 
+              select(uvs_id, depth_strata)) |> 
+  select(uvs_id, depth_strata, exposure)
+```
+
+```{r lpi_map, eval = TRUE, include = T}
+tmp <- lpi_meta |> 
+  filter(!is.na(lat)) |> 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) |> 
+  group_by(method, ps_site_id, location, habitat, exposure, geometry) |> 
+  summarize(strata = paste0(depth_m, "m",collapse = ", "))
+
+mapview::mapview(tmp,
+                 zcol = c(habitat = "habitat"), 
+                 legend = TRUE,
+                 col.regions = paletteer_d("wesanderson::Darjeeling1", 3),
+                 map.types = c("Esri.WorldImagery"),
+                 layer.name = "Habitat",
+                 popup = leafpop::popupTable(tmp,
+                                      zcol = c("method",
+                                               "ps_site_id",
+                                               "location",
+                                               "habitat",
+                                               "exposure")))
+```
+
+```{r lpi_table, eval = TRUE, include = T}
+lpi_meta |> 
+  group_by(location, exposure, habitat) |> 
+  summarize(strata = n_distinct(depth_strata),
+            n_sites = n_distinct(ps_site_id),
+            n_transects = n_distinct(transect_id),
+            n_sections = sum(n_sections),
+            surveyed_distance_m = sum(transect_length_m)) |> 
+  ungroup() |> 
+  group_by(location) |> 
+  gt::gt(rowname_col = "habitat", groupname_col = "location") |> 
+  summary_rows(columns  = contains(c("n_", "_m")),
+               fns = list(list(label = md("*Total*"), fn = "sum")),
+               fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  grand_summary_rows(columns  = contains(c("n_", "_m")),
+                     fns = list(list(label = md("**Grand total**"), fn = "sum")),
+                     fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  tab_header(title = "Number of benthic surveys per location, habitat, and exposure") |>
+  opt_align_table_header(align = "left") |> 
+  tab_style(locations = cells_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +1))) |> 
+  tab_style(locations = cells_grand_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +2))) |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_row_groups()) |> 
+  tab_options(ihtml.use_compact_mode = TRUE,
+              data_row.padding = px(5)) |> 
+  cols_label_with(fn = ~str_replace(.x, "n_", "# ") |> 
+                    str_to_title()) |> 
+  cols_label(ends_with("_m") ~ "Surveyed distance (m)")
+```
+
+```{r lpi_export, eval = F}
+bq_table_create(paste0("pristine-seas.metadata.",exp_id, "_lpi"), 
+                fields = as_bq_fields(lpi_meta))
+
+bigrquery::bq_table_upload(paste0("pristine-seas.metadata.",exp_id, "_lpi"), 
+                           values = lpi_meta, fields = lpi_meta)
+```
+

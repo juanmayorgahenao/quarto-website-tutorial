@@ -33,31 +33,31 @@ website:
     contents:
       - href: index.qmd
         text: Welcome
-      - href: 13_consolidate_exp_meta.qmd
+      - href: processing_scripts/13_consolidate_exp_meta.qmd
         text: Summary of work  
-      - href: 01_fish_surveys.qmd
+      - href: processing_scripts/01_fish_surveys.qmd
         text: Fish Surveys
-      - href: 02_benthos_surveys.qmd
+      - href: processing_scripts/02_benthos_surveys.qmd
         text: Benthos Surveys
-      - href: 03_inverts_surveys.qmd
+      - href: processing_scripts/03_inverts_surveys.qmd
         text: Invertebrates Surveys
-      - href: 04_recruitment.qmd
+      - href: processing_scripts/04_recruitment.qmd
         text: Coral recruitment
-      - href: 05_clams.qmd
+      - href: processing_scripts/05_clams.qmd
         text: Giant clams
-      - href: 06_ysi.qmd
+      - href: processing_scripts/06_ysi.qmd
         text: YSI profiles
-      - href: 07_edna.qmd
+      - href: processing_scripts/07_edna.qmd
         text: e-DNA
-      - href: 10_bruvs.qmd
+      - href: processing_scripts/10_bruvs.qmd
         text: Benthic BRUVS
-      - href: 09_pelagics.qmd
+      - href: processing_scripts/09_pelagics.qmd
         text: Pelagic BRUVS
-      - href: 08_birds.qmd
+      - href: processing_scripts/08_birds.qmd
         text: Bird Surveys
-      - href: 11_rov.qmd
+      - href: processing_scripts/11_rov.qmd
         text: ROV
-      - href: 12_dscm.qmd
+      - href: processing_scripts/12_dscm.qmd
         text: Deep seas cameras
 
 format:
