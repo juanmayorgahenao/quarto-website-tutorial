@@ -44,7 +44,9 @@ format:
     code-overflow: wrap
     toc: true
 
-
+execute:
+  freeze: auto
+  
 filters:
   - include-files.lua
   - quarto
