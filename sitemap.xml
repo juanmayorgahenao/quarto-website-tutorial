@@ -1,59 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/04_recruitment.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/04_recruitment.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/10_bruvs.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/10_bruvs.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/03_inverts_surveys.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/03_inverts_surveys.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/09_pelagics.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/09_pelagics.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
+  </url>
+  <url>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/12_dscm.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
+  </url>
+  <url>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/05_clams.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
+  </url>
+  <url>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/06_ysi.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
     <loc>https://pristine-seas.github.io/exp-PLW-2024/index.html</loc>
-    <lastmod>2024-04-10T17:07:05.619Z</lastmod>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/07_edna.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/02_benthos_surveys.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/02_benthos_surveys.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/07_edna.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/06_ysi.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/13_consolidate_exp_meta.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/05_clams.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/01_fish_surveys.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/12_dscm.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/08_birds.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
   <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/13_consolidate_exp_meta.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
-  </url>
-  <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/01_fish_surveys.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
-  </url>
-  <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/08_birds.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
-  </url>
-  <url>
-    <loc>https://pristine-seas.github.io/exp-PLW-2024/11_rov.html</loc>
-    <lastmod>2024-04-10T17:07:05.563Z</lastmod>
+    <loc>https://pristine-seas.github.io/exp-PLW-2024/processing_scripts/11_rov.html</loc>
+    <lastmod>2024-04-10T17:36:43.997Z</lastmod>
   </url>
 </urlset>
