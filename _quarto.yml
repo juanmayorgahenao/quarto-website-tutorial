@@ -34,8 +34,6 @@ website:
         text: Summary of work
       - href: 01_fish_surveys.qmd
         text: Fish Surveys
-      - href: 02_benthos_surveys.qmd
-        text: Benthos
 
 format:
   html:
