@@ -79,7 +79,7 @@ fish_meta <- fish_obs |>
             transect_length_m = n_reels*fish_reel_length) 
 
 fish_meta <- fish_meta |> 
-  mutate(method = "Fish surveys",
+  mutate(method = "Fish survey",
          ps_site_id = str_replace(uvs_id,  "uvs", "fish"),
          transect_id = paste(ps_site_id, diver, paste0(depth_m, "m"), sep = "_"),
          diver = case_when(diver == "AMF" ~ "Alan Friedlander", 
@@ -118,10 +118,6 @@ mapview::mapview(tmp,
                                                "strata")))
 ```
 
-```{r fish_NA, eval, include = F}
-naniar::vis_miss(fish_meta)
-```
-
 ```{r fish_table, eval = TRUE, include = T}
 fish_meta |> 
   group_by(location, exposure, habitat) |> 
@@ -153,12 +149,15 @@ fish_meta |>
                     str_to_title()) |> 
   cols_label(ends_with("_m") ~ "Surveyed distance (m)")
 ```
+```{r fish_NA, eval, include = F}
+naniar::vis_miss(fish_meta)
+```
 
-```{r fish_export}
-bq_table_create(paste0("pristine-seas.metadata.",exp_id, "_fish"), 
+```{r fish_export, eval = F}
+bq_table_create(paste0("pristine-seas.metadata.", exp_id, "_fish"), 
                 fields = as_bq_fields(fish_meta))
 
-bigrquery::bq_table_upload(paste0("pristine-seas.metadata.",exp_id, "_fish"), 
+bigrquery::bq_table_upload(paste0("pristine-seas.metadata.", exp_id, "_fish"), 
                            values = fish_meta, fields = fish_meta)
 ```
 

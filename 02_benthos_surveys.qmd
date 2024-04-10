@@ -123,7 +123,7 @@ lpi_meta <- lpi_transects |>
   ungroup()
 
 lpi_meta <- lpi_meta |> 
-  mutate(method = "Line point intercept",
+  mutate(method = "Benthic survey",
          team_lead = "Joaquim Garrabou/Eveline van der Steeg",
          transect_id = paste(ps_site_id, transect, paste0(depth_m, "m"), sep = "_"),
          depth_strata = case_when(depth_m <= 5 ~ "Supershallow",
@@ -197,7 +197,7 @@ lpi_meta |>
   cols_label(ends_with("_m") ~ "Surveyed distance (m)")
 ```
 
-```{r lpi_export}
+```{r lpi_export, eval = F}
 bq_table_create(paste0("pristine-seas.metadata.",exp_id, "_lpi"), 
                 fields = as_bq_fields(lpi_meta))
 

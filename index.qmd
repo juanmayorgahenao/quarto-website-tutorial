@@ -47,62 +47,15 @@ argo_track <- sf::st_read(file.path(exp_path,
 argo_nm <- round((st_length(argo_track)/10^3)*0.539957) # NM
 ```
 
-The Argo traveled a total of `r round(as.numeric(sum(argo_nm)*1.852))` km^2^ during this expedition. 
+The Argo traveled a total of `r round(as.numeric(sum(argo_nm)*1.852))` km during this expedition. 
 
 ```{r track_map, eval = TRUE, include = T}
+#| label: fig-track
+#| fig-cap: "RV Argo track. Based on the ship's AIS."
+#| cap-location: margin
 mapview::mapview(argo_track, 
-                 map.types = c("Esri.WorldImagery"))
+                 map.types = c("Esri.WorldImagery"), 
+                 layer.name = c("RV ARGO"), 
+                 color = c("gold"))
 ```
 
-# Summary of work
-
-```{r exp_meta_tbl, eval = T, include = T}
-expedition_meta <- tbl(bq_connection, "metadata.PLW_2024") |> 
-  filter(location != "Transit") |> 
-  collect()
-
-#| column: page
-expedition_meta |> 
-  group_by(location, method) |> 
-  summarize(n_sites = n_distinct(station_id)) |> 
-  pivot_wider(names_from = location, 
-              values_from = n_sites, 
-              values_fill = 0) |> 
-  gt::gt(rowname_col = "method") |> 
-  grand_summary_rows(columns = everything(),
-                     fns = list(list(label = md("**Grand total**"), fn = "sum")),
-                     fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
-  tab_spanner(label = "SW Islands",
-              columns = c("Sonsorol", "Fanna", "Pulo Anna", "Merir", "Tobi", "Helen")) |> 
-  tab_spanner(label = "Offshore",
-              columns = c("Babeldaob", "SW Slope", "NW Slope", "Seamount A", "Seamount B-N", "Seamount B-C", "Seamount B-S")) |> 
-  tab_header(title = "Number of workstations per method and location") |> 
-  opt_align_table_header(align = "left") |> 
-  tab_style(locations = cells_grand_summary(),
-            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +2))) |> 
-  tab_options(ihtml.use_compact_mode = TRUE,
-              data_row.padding = px(5)) 
-```
-
-```{r rov_map, eval = TRUE, include = T}
-tmp <- expedition_meta |> 
-  filter(!is.na(lon)) |> 
-  collect() |> 
-  st_as_sf(coords = c("lon", "lat"), crs = 4326) |> 
-  group_by(method, ps_site_id, location, geometry) |> 
-  summarize(strata = paste0(depth_m, "m",collapse = ", "))
-
-mapview::mapview(tmp |> 
-                   st_jitter(factor = 0.000005),
-                 zcol = c(method = "method"), 
-                 legend = TRUE,
-                 alpha = 0.5,
-                 col.regions = paletteer_d("MoMAColors::Klein", 11),
-                 map.types = c("Esri.WorldImagery"),
-                 layer.name = "method",
-                 popup = leafpop::popupTable(tmp,
-                                      zcol = c("method",
-                                               "ps_site_id",
-                                               "location",
-                                               "strata")))
-```

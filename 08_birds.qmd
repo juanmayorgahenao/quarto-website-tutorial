@@ -1,0 +1,163 @@
+---
+title: "Palau 2024 - Metadata"
+number-sections: false
+date: today
+theme: cosmo
+format: 
+  html:
+    self-contained: true
+    code-fold: true
+    toc: true
+    toc-location: right
+---
+
+```{r, message = F, warning = F, fig.width = 10, fig.height = 10, echo = F}
+library(paletteer)
+library(sf)
+library(bigrquery)
+library(gt)
+library(tidyverse)
+
+knitr::opts_chunk$set(eval = F, warning = F, message = F, include = F, echo = F)
+
+PristineSeasR::set_ps_paths(email = "marine.data.science@ngs.org")
+
+exp_id <- "PLW_2024"
+
+exp_path <- file.path(ps_science_path, "expeditions", "PLW-2024")
+
+ps_data_path <- file.path(ps_science_path, "datasets/")
+
+bigrquery::bq_auth(email = "marine.data.science@ngs.org")
+
+bq_connection <- DBI::dbConnect(bigrquery::bigquery(), project = "pristine-seas")
+```
+
+# Bird surveys
+
+## Metadata
+
+```{r birds_clean, eval = TRUE}
+birds_fieldbook <- readxl::read_excel(file.path(exp_path, 
+                                        paste0("data/primary/raw/birds/",
+                                               exp_id,
+                                               "_birds_fieldbook.xlsx"))) |> 
+  as_tibble() |> 
+  janitor::clean_names()
+
+birds_meta <- birds_fieldbook |> 
+  filter(!is.na(ps_station_id)) |> 
+  rename(ps_site_id = ps_station_id) |> 
+  mutate(expedition = exp_id, 
+         method = "Birds survey",
+         across(c(date), lubridate::ymd),
+         across(c(time_start, time_stop), hms::as_hms),
+         duration_mins = hms::hms(minutes  = duration),
+         across(c(long_start, long_stop, lat_start, lat_stop), ~round(as.numeric(.x), 5)),
+         across(c(distance), ~round(as.numeric(.x), 2)),
+         survey_type = case_when(standard_survey == "Y" ~ "Standard", 
+                                 str_detect(notes, "POINT COUNT") ~ "Point count",
+                                 str_detect(notes, "NEST COUNT") ~ "Nest count",
+                                 TRUE ~ "Other"),
+         team_lead = case_when(who == "CT" ~ "Chris Thompson",
+                               str_detect(who, "HK") ~ "Heather Ketebengang",
+                               str_detect(who, "VS") ~ "Vyv Summers",)) |> 
+  select(expedition, method, ps_site_id, survey_type ,location, date, time_start, time_stop, duration_mins, 
+         lon_start = long_start, lat_start,  lon_stop = long_stop, lat_stop, distance_km = distance, vessel, string, in_or_out, notes, team_lead, -sublocation,  -duration, -standard_survey) 
+birds_meta <- birds_meta |> 
+  replace_na(list(location = "Transit"))
+```
+
+```{r birds_dist, eval = TRUE, include = T}
+bird_transect_dist <- birds_meta |> 
+  select(ps_site_id, lon_start, lat_start, lon_stop, lat_stop) |> 
+  drop_na() 
+
+birds_start <- bird_transect_dist |> 
+  select(-c(lon_stop, lat_stop)) |> 
+  terra::vect( geom=c("lon_start", "lat_start"), crs="+proj=longlat +datum=WGS84")
+
+birds_stop <- bird_transect_dist |> 
+  select(-c(lon_start, lat_start)) |> 
+  terra::vect( geom=c("lon_stop", "lat_stop"), crs="+proj=longlat +datum=WGS84")
+
+birds_dist <- terra::distance(birds_start, birds_stop, pairwise=TRUE)
+
+bird_transect_dist$dist_km <- round(birds_dist)/10^3 #m to km
+
+birds_meta <- birds_meta |> 
+  left_join(bird_transect_dist) |> 
+  mutate(distance_km = coalesce(distance_km, dist_km)) |> 
+  select(-dist_km)
+
+birds_meta <- birds_meta |> 
+  relocate(distance_km, .after = "lat_stop")
+```
+
+```{r birds_NAs, eval = TRUE, include = T}
+naniar::vis_miss(birds_meta)
+```
+
+```{r birds_map, eval = TRUE, include = T}
+tmp <- birds_meta |> 
+  filter(!is.na(lon_start)) |> 
+  st_as_sf(coords = c("lon_start", "lat_start"), crs = 4326) |> 
+  group_by(method, ps_site_id, location, survey_type, geometry) 
+
+mapview::mapview(tmp,
+                 zcol = c(survey_type = "survey_type"), 
+                 legend = TRUE,
+                 col.regions = paletteer_d("wesanderson::Darjeeling1", 4),
+                 map.types = c("Esri.WorldImagery"),
+                 layer.name = "survey_type",
+                 popup = leafpop::popupTable(tmp,
+                                      zcol = c("method",
+                                               "ps_site_id",
+                                               "location",
+                                               "survey_type")))
+```
+
+```{r birds_table, eval = TRUE, include = T}
+birds_meta |> 
+  mutate(land = if_else(vessel == "Land", "Land", "Sea")) |> 
+  group_by(location, survey_type, land) |> 
+  summarize(n_surveys = n_distinct(ps_site_id),
+            total_km = sum(distance_km, na.rm = T),
+            total_time_hrs = round(as.numeric(sum(duration_mins)/60)/60, 2)) |> 
+  ungroup() |> 
+  pivot_wider(names_from = land, 
+              values_from = c("n_surveys", "total_km", "total_time_hrs"), 
+              names_glue = "{land}.{.value}", values_fill = 0) |> 
+  select(location, survey_type, contains("Sea"), contains("Land")) |> 
+  gt::gt(groupname_col = "location", rowname_col = "survey_type") |> 
+  gt::tab_spanner_delim(delim = ".") |> 
+  summary_rows(columns = contains(c("_")),
+               fns = list(list(label = md("*Total*"), fn = "sum")),
+               fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  grand_summary_rows(columns  = contains(c("_")),
+                     fns = list(list(label = md("**Grand total**"), fn = "sum")),
+                     fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  tab_header(title = "Seabirds surveys per location") |>
+  opt_align_table_header(align = "left") |> 
+  tab_style(locations = cells_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +1))) |> 
+  tab_style(locations = cells_grand_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +2))) |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_row_groups()) |> 
+  tab_options(ihtml.use_compact_mode = TRUE,
+              data_row.padding = px(5)) |> 
+  cols_label(contains("n_surveys") ~ "# Surveys",
+             contains("km") ~ "Distance (km)",
+             contains("hrs") ~ "Time (hrs)")
+```
+
+
+```{r birds_export, eval = F}
+bq_table_create(paste0("pristine-seas.metadata.",exp_id, "_birds"), 
+                fields = as_bq_fields(birds_meta))
+
+bigrquery::bq_table_upload(paste0("pristine-seas.metadata.",exp_id, "_birds"), 
+                           values = birds_meta, fields = birds_meta)
+```
+

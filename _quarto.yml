@@ -7,33 +7,58 @@ website:
   site-url: "https://pristine-seas.github.io/exp-PLW-2024" 
   repo-url: https://github.com/pristine-seas/exp-PLW-2024
   repo-actions: [issue]
+  description: A side-by-side comparison of polars, R base, dplyr, tidyr and data.table packages.
   
   page-footer:
     right: "This page is built with ❤️ and [Quarto](https://quarto.org/)."
     left: "&copy; CC-By Openscapes, 2024"
     
   sidebar:
-    logo: "images/logo.png"
+    title: "Expedition Palau - 2024"
+    logo: "images/ps-logo.png"
     pinned: true
-    align: bottom
+    
     tools: 
       - icon: globe
         href: https://pristineseas.org
         text: "pristineseas.org"
       - icon: github
-        href: https://github.com/openscapes/quarto-website-tutorial
+        href: https://github.com/pristine-seas/exp-PLW-2024
         text: "Palau 2024 expedition"
       - icon: hdd
         href: "https://drive.google.com/drive/folders/1wFrwIccznqruKO5ViatH6onK5i0xCutd?usp=sharing"         
-
     style: "docked"
     search: true
     collapse-level: 1
     contents:
       - href: index.qmd
-        text: Summary of work
+        text: Welcome
+      - href: 13_consolidate_exp_meta.qmd
+        text: Summary of work  
       - href: 01_fish_surveys.qmd
         text: Fish Surveys
+      - href: 02_benthos_surveys.qmd
+        text: Benthos Surveys
+      - href: 03_inverts_surveys.qmd
+        text: Invertebrates Surveys
+      - href: 04_recruitment.qmd
+        text: Coral recruitment
+      - href: 05_clams.qmd
+        text: Giant clams
+      - href: 06_ysi.qmd
+        text: YSI profiles
+      - href: 07_edna.qmd
+        text: e-DNA
+      - href: 10_bruvs.qmd
+        text: Benthic BRUVS
+      - href: 09_pelagics.qmd
+        text: Pelagic BRUVS
+      - href: 08_birds.qmd
+        text: Bird Surveys
+      - href: 11_rov.qmd
+        text: ROV
+      - href: 12_dscm.qmd
+        text: Deep seas cameras
 
 format:
   html:

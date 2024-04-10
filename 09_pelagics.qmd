@@ -1,0 +1,143 @@
+---
+title: "Palau 2024 - Metadata"
+number-sections: false
+date: today
+theme: cosmo
+format: 
+  html:
+    self-contained: true
+    code-fold: true
+    toc: true
+    toc-location: right
+---
+
+```{r, message = F, warning = F, fig.width = 10, fig.height = 10, echo = F}
+library(paletteer)
+library(sf)
+library(bigrquery)
+library(gt)
+library(tidyverse)
+
+knitr::opts_chunk$set(eval = F, warning = F, message = F, include = F, echo = F)
+
+PristineSeasR::set_ps_paths(email = "marine.data.science@ngs.org")
+
+exp_id <- "PLW_2024"
+
+exp_path <- file.path(ps_science_path, "expeditions", "PLW-2024")
+
+ps_data_path <- file.path(ps_science_path, "datasets/")
+
+bigrquery::bq_auth(email = "marine.data.science@ngs.org")
+
+bq_connection <- DBI::dbConnect(bigrquery::bigquery(), project = "pristine-seas")
+```
+
+# Pelagic BRUVS
+
+## Metadata
+
+```{r pbruv_clean, eval = TRUE, include = T}
+pbruvs_fieldbook <- readxl::read_xlsx(file.path(exp_path, 
+                                        paste0("data/primary/raw/pelagics/",
+                                               exp_id,
+                                               "_pelagics_fieldbook.xlsx"))) |> 
+  as_tibble() |> 
+  janitor::clean_names() 
+
+pbruvs_meta <- pbruvs_fieldbook |> 
+  rename(ps_site_id = ps_station_id) |> 
+  mutate(expedition = exp_id, 
+         method = "Pelagic BRUVS",
+         across(c(date), lubridate::ymd),
+         across(c(lat_in, lat_out, long_in, long_out), as.numeric),
+         across(c(time_in, time_out), hms::as_hms),
+         depth_m = 10,
+         deployment_number = as.numeric(str_extract(ps_site_id, "[^_]+$")),
+         team_lead = if_else(deployment_number < 23, "Chris Thompson", "Vyv Summers"),
+         uwa_string = string) |> 
+  select(expedition, method, ps_site_id, uwa_opcode = opcode, uwa_string , location, date, time_in, time_out, lon_in = long_in, lat_in,  lon_out = long_out, lat_out, depth_m, rig, left_cam, right_cam, bait, team_lead, scan_notes = species_notes, field_comments)
+```
+
+```{r pbruv_dist, eval = TRUE, include = T}
+pbruv_ins <- pbruvs_meta |> 
+  select(uwa_opcode, lat_in, lon_in) |> 
+  terra::vect( geom=c("lon_in", "lat_in"), crs="+proj=longlat +datum=WGS84")
+
+pbruv_outs <- pbruvs_meta |> 
+  select(uwa_opcode, lat_out, lon_out) |> 
+  terra::vect( geom=c("lon_out", "lat_out"), crs="+proj=longlat +datum=WGS84")
+
+drifts <- terra::distance(pbruv_ins, pbruv_outs, pairwise=TRUE)
+
+pbruvs_meta$drift_m <- round(drifts)
+
+pbruvs_meta <- pbruvs_meta |> 
+  relocate(drift_m, .after = "lat_out")
+```
+
+```{r pbruvs_NAs, eval = TRUE, include = T}
+naniar::vis_miss(pbruvs_meta)
+```
+
+```{r pbruv_map, eval = TRUE, include = T}
+tmp <- pbruvs_meta |> 
+  mutate(lon = coalesce(lon_in, lon_out),
+         lat = coalesce(lat_in, lat_out)) |> 
+  filter(!is.na(lat)) |> 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) |> 
+  group_by(method, ps_site_id, location, drift_m, geometry) 
+
+mapview::mapview(tmp,
+                 zcol = c(drift_m = "drift_m"), 
+                 legend = TRUE,
+                 col.regions = paletteer_c("ggthemes::Red-Gold", 3),
+                 map.types = c("Esri.WorldImagery"),
+                 layer.name = "drift_m",
+                 popup = leafpop::popupTable(tmp,
+                                      zcol = c("method",
+                                               "ps_site_id",
+                                               "location",
+                                               "drift_m")),
+                 cex = 4)
+```
+
+```{r pbruvs_table, eval = TRUE, include = T}
+pbruvs_meta |> 
+  group_by(location, ps_site_id) |> 
+  summarize(avg_drift = mean(drift_m, na.rm = T),
+            n_rigs = n_distinct(uwa_opcode)) |> 
+  ungroup() |> 
+  group_by(location) |> 
+  summarize(n_sites = n_distinct(ps_site_id),
+            n_rigs = sum(n_rigs),
+            total_drift_km = round(sum(avg_drift, na.rm = T)/10^3, 1)) |> 
+  ungroup() |> 
+  mutate_if(is.numeric, round, 3) |> 
+  gt::gt(rowname_col   = "location") |> 
+  tab_spanner(label = "Depth", columns = contains("depth")) |> 
+  grand_summary_rows(columns  = contains(c("n_sites", "total_drift_km", "n_rigs")),
+                     fns = list(list(label = md("**Grand total**"), fn = "sum")),
+                     fmt = ~ fmt_number(., decimals = 0, use_seps = FALSE)) |> 
+  tab_header(title = "Number of pelagic BRUVS per location") |> 
+  opt_align_table_header(align = "left") |> 
+  tab_style(locations = cells_grand_summary(),
+            style = cell_fill(color = "lightblue" |> adjust_luminance(steps = +2))) |> 
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_row_groups()) |> 
+  tab_options(ihtml.use_compact_mode = TRUE,
+              data_row.padding = px(5)) |> 
+  cols_label("n_sites" ~ "# Deployments",
+             "n_rigs" ~ "# Rigs",
+             "total_drift_km" ~ "Total drift (km)") 
+```
+
+
+```{r pbruv_export, eval = F}
+bq_table_create(paste0("pristine-seas.metadata.",exp_id, "_pbruvs"), 
+                fields = as_bq_fields(pbruvs_meta))
+
+bigrquery::bq_table_upload(paste0("pristine-seas.metadata.",exp_id, "_pbruvs"), 
+                           values = pbruvs_meta, fields = pbruvs_meta)
+```
+
